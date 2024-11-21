@@ -361,6 +361,50 @@ static Htop_Reaction actionCollapseIntoParent(State* st) {
    return changed ? HTOP_RECALCULATE : HTOP_OK;
 }
 
+static Htop_Reaction actionExportToTxt(ATTR_UNUSED State* st) {
+  // Open the file for writting
+   FILE* file = fopen("htop_export.txt", "w");
+   if(!file) {
+      perror("Failed to create export file");
+      return HTOP_OK;
+   }
+
+   // Write the header information
+   fprintf(file, "HTOP Export - Resource Usage and Process State\n");
+   fprintf(file, "==================================================\n");
+
+   // Example data (TODO: Replace with actual system data)
+   fprintf(file, "CPU Usage: 25%%\n");
+   fprintf(file, "MEM Usage: 52%%\n");
+   fprintf(file, "SWP Usage: 87%%\n");
+   fprintf(file, "\n");
+
+   // TODO: Add actual process state data dynamically
+   fprintf(file, "Processes: 78 running, 2 sleeping, 1 zombie\n\n");
+
+   // Example process data (TODO: Replace with actual process)
+   fprintf(file, "PID    | User   | CPU    | MEM    | State | Command\n");
+   fprintf(file, "---------------------------------------------------\n");
+   fprintf(file, "%-6s | %-6s | %-6s | %-6s | %-5s | %-10s\n", "1234", "root", "3.45%", "1.23%", "R", "bash");
+   fprintf(file, "%-6s | %-6s | %-6s | %-6s | %-5s | %-10s\n", "2345", "user1", "0.87%", "0.45%", "S", "vim");
+   fprintf(file, "%-6s | %-6s | %-6s | %-6s | %-5s | %-10s\n", "...", "...", "...", "...", "...", "...");
+
+   // Close the file
+   fclose(file);
+
+   // Display POPUP message
+   clear(); // Clear the curren screen
+   mvprintw(LINES / 2 - 1, (COLS - 30) / 2, "Export Complete!");
+   mvprintw(LINES / 2, (COLS - 30) / 2, "File: htop_export.txt");
+   mvprintw(LINES / 2 + 2, (COLS - 30) / 2, "Press any key to return...");
+   refresh();
+
+   // Wait for user input
+   CRT_readKey();
+
+   return HTOP_REFRESH;
+}
+
 static Htop_Reaction actionExpandCollapseOrSortColumn(State* st) {
    return st->host->settings->ss->treeView ? actionExpandOrCollapse(st) : actionSetSortColumn(st);
 }
@@ -916,6 +960,7 @@ void Action_setBindings(Htop_Action* keys) {
    keys['['] = actionLowerPriority;
    keys['\014'] = actionRedraw; // Ctrl+L
    keys['\177'] = actionCollapseIntoParent;
+   keys['\005'] = actionExportToTxt; // Ctrl+E
    keys['\\'] = actionIncFilter;
    keys[']'] = actionHigherPriority;
    keys['a'] = actionSetAffinity;
