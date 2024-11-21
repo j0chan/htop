@@ -8,6 +8,7 @@ in the source distribution for its full text.
 #include "config.h" // IWYU pragma: keep
 
 #include "Action.h"
+#include "Machine.h"
 
 #include <assert.h>
 #include <pwd.h>
@@ -362,38 +363,76 @@ static Htop_Reaction actionCollapseIntoParent(State* st) {
 }
 
 static Htop_Reaction actionExportToTxt(ATTR_UNUSED State* st) {
-  // Open the file for writting
+   // Open the file for writing
    FILE* file = fopen("htop_export.txt", "w");
-   if(!file) {
+   if (!file) {
       perror("Failed to create export file");
       return HTOP_OK;
    }
 
-   // Write the header information
-   fprintf(file, "HTOP Export - Resource Usage and Process State\n");
-   fprintf(file, "==================================================\n");
+   // Access the Machine structure
+   Machine* machine = st->host;
 
-   // Example data (TODO: Replace with actual system data)
-   fprintf(file, "CPU Usage: 25%%\n");
-   fprintf(file, "MEM Usage: 52%%\n");
-   fprintf(file, "SWP Usage: 87%%\n");
+   // Write the header information
+   fprintf(file, "===========================================================================\n");
+   fprintf(file, "||             HTOP Export - Resource Usage and Process State            ||\n");
+   fprintf(file, "===========================================================================\n");
+
+   // Write resource usage data
+   fprintf(file, "CPU Active: %u\n", machine->activeCPUs);
+   fprintf(file, "MEM Usage : %.2f%%\n",
+           (double)machine->usedMem / machine->totalMem * 100);
+   fprintf(file, "SWP Usage : %.2f%%\n",
+           (double)machine->usedSwap / machine->totalSwap * 100);
    fprintf(file, "\n");
 
-   // TODO: Add actual process state data dynamically
-   fprintf(file, "Processes: 78 running, 2 sleeping, 1 zombie\n\n");
+   // Process state aggregation
+   size_t running = 0, sleeping = 0, zombie = 0, other = 0;
+   Table* processTable = machine->processTable;
 
-   // Example process data (TODO: Replace with actual process)
-   fprintf(file, "PID    | User   | CPU    | MEM    | State | Command\n");
-   fprintf(file, "---------------------------------------------------\n");
-   fprintf(file, "%-6s | %-6s | %-6s | %-6s | %-5s | %-10s\n", "1234", "root", "3.45%", "1.23%", "R", "bash");
-   fprintf(file, "%-6s | %-6s | %-6s | %-6s | %-5s | %-10s\n", "2345", "user1", "0.87%", "0.45%", "S", "vim");
-   fprintf(file, "%-6s | %-6s | %-6s | %-6s | %-5s | %-10s\n", "...", "...", "...", "...", "...", "...");
+   for (size_t i = 0; i < (size_t)Vector_size(processTable->rows); i++) {  // Cast to size_t
+      Row* row = (Row*)Vector_get(processTable->rows, i);                 // Explicit cast
+      Process* process = (Process*)row;
+
+      // Check process state and increment respective counters
+      switch (process->state) {
+         case RUNNING: running++; break;
+         case SLEEPING: sleeping++; break;
+         case ZOMBIE: zombie++; break;
+         default: other++; break;
+      }
+   }
+
+   // Write aggregated process state summary
+   fprintf(file, "Processes: %zu Running, %zu Sleeping, %zu Zombie, %zu Other\n\n",
+           running, sleeping, zombie, other);
+
+   // Write process table header with aligned formatting
+   fprintf(file, "%-6s | %-17s | %-6s | %-6s | %-9s | %-30s\n",
+           "PID", "User", "CPU(%)", "MEM(%)", "State", "Command");
+   fprintf(file, "---------------------------------------------------------------------------\n");
+
+   // Write detailed process information with better alignment
+   for (size_t i = 0; i < (size_t)Vector_size(processTable->rows); i++) {
+      Row* row = (Row*)Vector_get(processTable->rows, i); // Get row
+      Process* process = (Process*)row;                  // Cast to Process
+
+      fprintf(file, "%-6d | %-17s | %-6.2f | %-6.2f | %-9s | %-30s\n",
+              process->super.id,                               // PID
+              process->user ? process->user : "N/A",           // User name
+              process->percent_cpu,                            // CPU usage
+              process->percent_mem,                            // Memory usage
+              process->state == RUNNING ? "Running" :
+              process->state == SLEEPING ? "Sleeping" :
+              process->state == ZOMBIE ? "Zombie" : "Other",   // State
+              process->procComm ? process->procComm : "N/A");  // Command
+   }
 
    // Close the file
    fclose(file);
 
-   // Display POPUP message
-   clear(); // Clear the curren screen
+   // Display popup message
+   clear();
    mvprintw(LINES / 2 - 1, (COLS - 30) / 2, "Export Complete!");
    mvprintw(LINES / 2, (COLS - 30) / 2, "File: htop_export.txt");
    mvprintw(LINES / 2 + 2, (COLS - 30) / 2, "Press any key to return...");
