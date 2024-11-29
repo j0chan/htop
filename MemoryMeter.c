@@ -25,8 +25,7 @@ static const int MemoryMeter_attributes[] = {
    MEMORY_SHARED,
    MEMORY_COMPRESSED,
    MEMORY_BUFFERS,
-   MEMORY_CACHE
-};
+    MEMORY_CACHE};
 
 static void MemoryMeter_updateValues(Meter* this) {
    char* buffer = this->txtBuffer;
@@ -59,42 +58,38 @@ static void MemoryMeter_updateValues(Meter* this) {
    Meter_humanUnit(buffer, this->total, size);
 }
 
-static void MemoryMeter_display(const Object* cast, RichString* out) {
-   char buffer[50];
-   const Meter* this = (const Meter*)cast;
+static void MemoryMeter_display(const Object *cast, RichString *out)
+{
+   char buffer[50] = {0}; // buffer를 한 번 초기화
+   const Meter *this = (const Meter *)cast;
 
-   RichString_writeAscii(out, CRT_colors[METER_TEXT], ":");
+   // 출력할 항목의 레이블과 값 배열
+   const char *labels[] = {" used:", " shared:", " compressed:", " buffers:", " cache:"};
+   const double values[] = {
+       this->values[MEMORY_METER_USED],
+       this->values[MEMORY_METER_SHARED],
+       this->values[MEMORY_METER_COMPRESSED],
+       this->values[MEMORY_METER_BUFFERS],
+       this->values[MEMORY_METER_CACHE]};
+
+   // 총 메모리 출력
    Meter_humanUnit(buffer, this->total, sizeof(buffer));
+   RichString_appendAscii(out, CRT_colors[METER_TEXT], ":");
    RichString_appendAscii(out, CRT_colors[METER_VALUE], buffer);
 
-   Meter_humanUnit(buffer, this->values[MEMORY_METER_USED], sizeof(buffer));
-   RichString_appendAscii(out, CRT_colors[METER_TEXT], " used:");
-   RichString_appendAscii(out, CRT_colors[MEMORY_USED], buffer);
-
-   /* shared memory is not supported on all platforms */
-   if (isNonnegative(this->values[MEMORY_METER_SHARED])) {
-      Meter_humanUnit(buffer, this->values[MEMORY_METER_SHARED], sizeof(buffer));
-      RichString_appendAscii(out, CRT_colors[METER_TEXT], " shared:");
-      RichString_appendAscii(out, CRT_colors[MEMORY_SHARED], buffer);
+   // 메모리 속성별 반복 처리
+   for (int i = 0; i < 5; i++)
+   {
+      if (i >= 1 && !isNonnegative(values[i]))
+         continue; // 유효하지 않으면 건너뛈다
+      Meter_humanUnit(buffer, values[i], sizeof(buffer));
+      RichString_appendAscii(out, CRT_colors[METER_TEXT], labels[i]);
+      RichString_appendAscii(out, CRT_colors[METER_VALUE], buffer);
    }
 
-   /* compressed memory is not supported on all platforms */
-   if (isNonnegative(this->values[MEMORY_METER_COMPRESSED])) {
-      Meter_humanUnit(buffer, this->values[MEMORY_METER_COMPRESSED], sizeof(buffer));
-      RichString_appendAscii(out, CRT_colors[METER_TEXT], " compressed:");
-      RichString_appendAscii(out, CRT_colors[MEMORY_COMPRESSED], buffer);
-   }
-
-   Meter_humanUnit(buffer, this->values[MEMORY_METER_BUFFERS], sizeof(buffer));
-   RichString_appendAscii(out, CRT_colors[METER_TEXT], " buffers:");
-   RichString_appendAscii(out, CRT_colors[MEMORY_BUFFERS_TEXT], buffer);
-
-   Meter_humanUnit(buffer, this->values[MEMORY_METER_CACHE], sizeof(buffer));
-   RichString_appendAscii(out, CRT_colors[METER_TEXT], " cache:");
-   RichString_appendAscii(out, CRT_colors[MEMORY_CACHE], buffer);
-
-   /* available memory is not supported on all platforms */
-   if (isNonnegative(this->values[MEMORY_METER_AVAILABLE])) {
+   // 사용 가능한 메모리 출력
+   if (isNonnegative(this->values[MEMORY_METER_AVAILABLE]))
+   {
       Meter_humanUnit(buffer, this->values[MEMORY_METER_AVAILABLE], sizeof(buffer));
       RichString_appendAscii(out, CRT_colors[METER_TEXT], " available:");
       RichString_appendAscii(out, CRT_colors[METER_VALUE], buffer);
