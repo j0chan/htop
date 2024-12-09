@@ -8,6 +8,7 @@ in the source distribution for its full text.
 #include "config.h" // IWYU pragma: keep
 
 #include "Action.h"
+#include "Machine.h"
 
 #include <assert.h>
 #include <pwd.h>
@@ -361,6 +362,88 @@ static Htop_Reaction actionCollapseIntoParent(State* st) {
    return changed ? HTOP_RECALCULATE : HTOP_OK;
 }
 
+static Htop_Reaction actionExportToTxt(ATTR_UNUSED State* st) {
+   // Open the file for writing
+   FILE* file = fopen("htop_export.txt", "w");
+   if (!file) {
+      perror("Failed to create export file");
+      return HTOP_OK;
+   }
+
+   // Access the Machine structure
+   Machine* machine = st->host;
+
+   // Write the header information
+   fprintf(file, "===========================================================================\n");
+   fprintf(file, "||             HTOP Export - Resource Usage and Process State            ||\n");
+   fprintf(file, "===========================================================================\n");
+
+   // Write resource usage data
+   fprintf(file, "CPU Active: %u\n", machine->activeCPUs);
+   fprintf(file, "MEM Usage : %.2f%%\n",
+           (double)machine->usedMem / machine->totalMem * 100);
+   fprintf(file, "SWP Usage : %.2f%%\n",
+           (double)machine->usedSwap / machine->totalSwap * 100);
+   fprintf(file, "\n");
+
+   // Process state aggregation
+   size_t running = 0, sleeping = 0, zombie = 0, other = 0;
+   Table* processTable = machine->processTable;
+
+   for (size_t i = 0; i < (size_t)Vector_size(processTable->rows); i++) {  // Cast to size_t
+      Row* row = (Row*)Vector_get(processTable->rows, i);                 // Explicit cast
+      Process* process = (Process*)row;
+
+      // Check process state and increment respective counters
+      switch (process->state) {
+         case RUNNING: running++; break;
+         case SLEEPING: sleeping++; break;
+         case ZOMBIE: zombie++; break;
+         default: other++; break;
+      }
+   }
+
+   // Write aggregated process state summary
+   fprintf(file, "Processes: %zu Running, %zu Sleeping, %zu Zombie, %zu Other\n\n",
+           running, sleeping, zombie, other);
+
+   // Write process table header with aligned formatting
+   fprintf(file, "%-6s | %-17s | %-6s | %-6s | %-9s | %-30s\n",
+           "PID", "User", "CPU(%)", "MEM(%)", "State", "Command");
+   fprintf(file, "---------------------------------------------------------------------------\n");
+
+   // Write detailed process information with better alignment
+   for (size_t i = 0; i < (size_t)Vector_size(processTable->rows); i++) {
+      Row* row = (Row*)Vector_get(processTable->rows, i); // Get row
+      Process* process = (Process*)row;                  // Cast to Process
+
+      fprintf(file, "%-6d | %-17s | %-6.2f | %-6.2f | %-9s | %-30s\n",
+              process->super.id,                               // PID
+              process->user ? process->user : "N/A",           // User name
+              process->percent_cpu,                            // CPU usage
+              process->percent_mem,                            // Memory usage
+              process->state == RUNNING ? "Running" :
+              process->state == SLEEPING ? "Sleeping" :
+              process->state == ZOMBIE ? "Zombie" : "Other",   // State
+              process->procComm ? process->procComm : "N/A");  // Command
+   }
+
+   // Close the file
+   fclose(file);
+
+   // Display popup message
+   clear();
+   mvprintw(LINES / 2 - 1, (COLS - 30) / 2, "Export Complete!");
+   mvprintw(LINES / 2, (COLS - 30) / 2, "File: htop_export.txt");
+   mvprintw(LINES / 2 + 2, (COLS - 30) / 2, "Press any key to return...");
+   refresh();
+
+   // Wait for user input
+   CRT_readKey();
+
+   return HTOP_REFRESH;
+}
+
 static Htop_Reaction actionExpandCollapseOrSortColumn(State* st) {
    return st->host->settings->ss->treeView ? actionExpandOrCollapse(st) : actionSetSortColumn(st);
 }
@@ -676,6 +759,7 @@ static const struct {
    { .key = "   F9 k: ", .roInactive = true,  .info = "kill process/tagged processes" },
    { .key = "   F7 ]: ", .roInactive = true,  .info = "higher priority (root only)" },
    { .key = "   F8 [: ", .roInactive = true,  .info = "lower priority (+ nice)" },
+   { .key = " Ctrl e: ",  .roInactive = false, .info = "Export usage/process state to txt" },
 #if (defined(HAVE_LIBHWLOC) || defined(HAVE_AFFINITY))
    { .key = "      a: ", .roInactive = true, .info = "set CPU affinity" },
 #endif
@@ -915,6 +999,7 @@ void Action_setBindings(Htop_Action* keys) {
    keys['['] = actionLowerPriority;
    keys['\014'] = actionRedraw; // Ctrl+L
    keys['\177'] = actionCollapseIntoParent;
+   keys['\005'] = actionExportToTxt; // Ctrl+E
    keys['\\'] = actionIncFilter;
    keys[']'] = actionHigherPriority;
    keys['a'] = actionSetAffinity;
